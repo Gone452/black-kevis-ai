@@ -3,10 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Black Kevis AI - Local</title>
-  
-  <script src="coi-serviceworker.js"></script>
-
+  <title>Black Kevis AI - Instant Mode</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -39,7 +36,6 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
-      background: #0a0a0a;
     }
     .message {
       max-width: 82%;
@@ -50,16 +46,6 @@
     }
     .user { align-self: flex-end; background: linear-gradient(135deg, #ff00aa, #aa00ff); color: white; border-bottom-right-radius: 6px; }
     .ai { align-self: flex-start; background: #1a1a1a; border: 1px solid #333; border-bottom-left-radius: 6px; }
-
-    .typing {
-      align-self: flex-start;
-      background: #1a1a1a;
-      padding: 16px 22px;
-      border-radius: 22px;
-      border-bottom-left-radius: 6px;
-      font-size: 0.9rem;
-      color: #ff00aa;
-    }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: none; } }
 
@@ -84,7 +70,6 @@
       font-size: 1.05rem;
       outline: none;
       resize: none;
-      max-height: 160px;
     }
     #send-btn {
       width: 56px; height: 56px;
@@ -95,16 +80,6 @@
       font-size: 1.7rem;
       cursor: pointer;
     }
-    #send-btn:disabled { opacity: 0.2; cursor: not-allowed; }
-
-    .welcome { text-align: center; margin: 80px 20px 40px; color: #aaa; }
-    .welcome h1 {
-      font-size: 2.8rem;
-      background: linear-gradient(90deg, #ff00aa, #aa00ff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .status-bar { font-size: 0.8rem; color: #666; text-align: center; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -112,101 +87,56 @@
   <div class="header">BLACK KEVIS AI</div>
 
   <div class="chat-container" id="chat">
-    <div class="welcome">
-      <h1>Black Kevis AI</h1>
-      <p>Local Mode (No API)</p>
-      <div id="loading-status" class="status-bar">Initializing Engine...</div>
-    </div>
+    <div class="message ai">Yo! I'm back on the cloud. Ask me anything, no loading needed.</div>
   </div>
 
   <div class="input-area">
     <div class="input-wrapper">
-      <textarea id="user-input" rows="1" placeholder="AI is loading..." disabled></textarea>
-      <button id="send-btn" disabled>↑</button>
+      <textarea id="user-input" rows="1" placeholder="Type your message..."></textarea>
+      <button id="send-btn">↑</button>
     </div>
   </div>
 
-  <script type="module">
-    // FIX: Using the absolute URL to prevent 404 errors on GitHub
-    import * as webllm from "https://esm.run/@mlc-ai/webllm";
+  <script>
+    // PUT YOUR KEY HERE
+    const API_KEY = "YOUR_API_KEY_HERE";
+    const MODEL = "gemini-1.5-flash";
 
     const chat = document.getElementById('chat');
     const userInput = document.getElementById('user-input');
     const sendBtn = document.getElementById('send-btn');
-    const statusText = document.getElementById('loading-status');
-
-    // Tiny model (approx 135MB) for fast local loading
-    const selectedModel = "SmolLM2-135B-Instruct-q4f16_1-MLC";
-    let engine;
-
-    async function initAI() {
-      try {
-        engine = await webllm.CreateMLCEngine(selectedModel, {
-          initProgressCallback: (report) => {
-            statusText.textContent = report.text;
-          }
-        });
-        
-        statusText.textContent = "AI Model Ready.";
-        userInput.disabled = false;
-        sendBtn.disabled = false;
-        userInput.placeholder = "Type your message...";
-      } catch (err) {
-        statusText.textContent = "Error: WebGPU not supported. Use Chrome or Edge.";
-        console.error(err);
-      }
-    }
 
     async function sendMessage() {
       const text = userInput.value.trim();
-      if (!text || !engine) return;
+      if (!text) return;
 
       addMessage(text, 'user');
       userInput.value = '';
-      userInput.style.height = 'auto';
-
-      const typing = showTyping();
 
       try {
-        const messages = [{ role: "user", content: text }];
-        const chunks = await engine.chat.completions.create({ messages });
-        const aiResponse = chunks.choices[0].message.content;
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text }] }] })
+        });
 
-        typing.remove();
+        const data = await res.json();
+        const aiResponse = data.candidates[0].content.parts[0].text;
         addMessage(aiResponse, 'ai');
       } catch (err) {
-        typing.remove();
-        addMessage("Local Error: " + err.message, 'ai');
+        addMessage("Connection error. Check your API key.", 'ai');
       }
     }
 
     function addMessage(text, sender) {
       const msg = document.createElement('div');
       msg.className = `message ${sender}`;
-      msg.innerHTML = `<div>${text.replace(/\n/g, '<br>')}</div>`;
+      msg.textContent = text;
       chat.appendChild(msg);
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function showTyping() {
-      const typing = document.createElement('div');
-      typing.className = 'typing';
-      typing.textContent = "Black Kevis is thinking...";
-      chat.appendChild(typing);
-      chat.scrollTop = chat.scrollHeight;
-      return typing;
-    }
-
     sendBtn.addEventListener('click', sendMessage);
-    userInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
-
-    // Start engine on load
-    initAI();
   </script>
 </body>
 </html>
