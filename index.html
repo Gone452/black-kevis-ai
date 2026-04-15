@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Black Kevis AI - GitHub Edition</title>
-  <script src="coi-serviceworker.js"></script>
+  <title>Black Kevis AI - Local</title>
   
+  <script src="coi-serviceworker.js"></script>
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -38,15 +39,29 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
+      background: #0a0a0a;
     }
     .message {
       max-width: 82%;
       padding: 16px 22px;
       border-radius: 22px;
       line-height: 1.6;
+      animation: fadeIn 0.3s ease;
     }
     .user { align-self: flex-end; background: linear-gradient(135deg, #ff00aa, #aa00ff); color: white; border-bottom-right-radius: 6px; }
     .ai { align-self: flex-start; background: #1a1a1a; border: 1px solid #333; border-bottom-left-radius: 6px; }
+
+    .typing {
+      align-self: flex-start;
+      background: #1a1a1a;
+      padding: 16px 22px;
+      border-radius: 22px;
+      border-bottom-left-radius: 6px;
+      font-size: 0.9rem;
+      color: #ff00aa;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: none; } }
 
     .input-area {
       padding: 20px 24px;
@@ -66,8 +81,10 @@
       border-radius: 30px;
       background: #1a1a1a;
       color: white;
+      font-size: 1.05rem;
       outline: none;
       resize: none;
+      max-height: 160px;
     }
     #send-btn {
       width: 56px; height: 56px;
@@ -75,9 +92,19 @@
       background: linear-gradient(135deg, #ff00aa, #aa00ff);
       color: white;
       border-radius: 50%;
+      font-size: 1.7rem;
       cursor: pointer;
     }
-    .status-bar { font-size: 0.8rem; color: #ff00aa; text-align: center; margin-bottom: 10px; }
+    #send-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+
+    .welcome { text-align: center; margin: 80px 20px 40px; color: #aaa; }
+    .welcome h1 {
+      font-size: 2.8rem;
+      background: linear-gradient(90deg, #ff00aa, #aa00ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-bar { font-size: 0.8rem; color: #666; text-align: center; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -85,20 +112,22 @@
   <div class="header">BLACK KEVIS AI</div>
 
   <div class="chat-container" id="chat">
-    <div style="text-align: center; margin-top: 50px;">
-      <h1 style="color: #ff00aa; font-size: 2.5rem;">Local Mode</h1>
-      <p id="loading-status" class="status-bar">Checking WebGPU...</p>
+    <div class="welcome">
+      <h1>Black Kevis AI</h1>
+      <p>Local Mode (No API)</p>
+      <div id="loading-status" class="status-bar">Initializing Engine...</div>
     </div>
   </div>
 
   <div class="input-area">
     <div class="input-wrapper">
-      <textarea id="user-input" rows="1" placeholder="Loading AI..." disabled></textarea>
+      <textarea id="user-input" rows="1" placeholder="AI is loading..." disabled></textarea>
       <button id="send-btn" disabled>↑</button>
     </div>
   </div>
 
   <script type="module">
+    // FIX: Using the absolute URL to prevent 404 errors on GitHub
     import * as webllm from "https://esm.run/@mlc-ai/webllm";
 
     const chat = document.getElementById('chat');
@@ -106,7 +135,7 @@
     const sendBtn = document.getElementById('send-btn');
     const statusText = document.getElementById('loading-status');
 
-    // Tiny 300MB model
+    // Tiny model (approx 135MB) for fast local loading
     const selectedModel = "SmolLM2-135B-Instruct-q4f16_1-MLC";
     let engine;
 
@@ -118,12 +147,12 @@
           }
         });
         
-        statusText.textContent = "Hardware Ready.";
+        statusText.textContent = "AI Model Ready.";
         userInput.disabled = false;
         sendBtn.disabled = false;
-        userInput.placeholder = "Message Black Kevis...";
+        userInput.placeholder = "Type your message...";
       } catch (err) {
-        statusText.textContent = "WebGPU failed. Use Chrome/Edge.";
+        statusText.textContent = "Error: WebGPU not supported. Use Chrome or Edge.";
         console.error(err);
       }
     }
@@ -134,26 +163,49 @@
 
       addMessage(text, 'user');
       userInput.value = '';
+      userInput.style.height = 'auto';
+
+      const typing = showTyping();
 
       try {
-        const reply = await engine.chat.completions.create({ 
-            messages: [{ role: "user", content: text }] 
-        });
-        addMessage(reply.choices[0].message.content, 'ai');
+        const messages = [{ role: "user", content: text }];
+        const chunks = await engine.chat.completions.create({ messages });
+        const aiResponse = chunks.choices[0].message.content;
+
+        typing.remove();
+        addMessage(aiResponse, 'ai');
       } catch (err) {
-        addMessage("Error: " + err.message, 'ai');
+        typing.remove();
+        addMessage("Local Error: " + err.message, 'ai');
       }
     }
 
     function addMessage(text, sender) {
       const msg = document.createElement('div');
       msg.className = `message ${sender}`;
-      msg.textContent = text;
+      msg.innerHTML = `<div>${text.replace(/\n/g, '<br>')}</div>`;
       chat.appendChild(msg);
       chat.scrollTop = chat.scrollHeight;
     }
 
+    function showTyping() {
+      const typing = document.createElement('div');
+      typing.className = 'typing';
+      typing.textContent = "Black Kevis is thinking...";
+      chat.appendChild(typing);
+      chat.scrollTop = chat.scrollHeight;
+      return typing;
+    }
+
     sendBtn.addEventListener('click', sendMessage);
+    userInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Start engine on load
     initAI();
   </script>
 </body>
